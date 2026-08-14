@@ -31,7 +31,7 @@ took 243-frame inputs; we feed 75. ``kept_frames=27`` still picks the 27
 center frames as in the published model.
 
 ``DropPath`` / ``Mlp`` / ``Attention`` / ``Block`` are imported from
-``model_poseformer`` (they're identical between PoseFormer and
+``poseformer.py`` (they're identical between PoseFormer and
 PoseFormerV2). ``FreqMlp`` and ``MixedBlock`` are added here.
 """
 
@@ -43,7 +43,7 @@ import torch
 import torch.nn as nn
 import torch_dct as dct
 
-from model_poseformer import Attention, Block, DropPath, Mlp
+from .poseformer import Attention, Block, DropPath, Mlp
 
 
 class FreqMlp(nn.Module):

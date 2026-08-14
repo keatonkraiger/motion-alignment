@@ -1,0 +1,50 @@
+# MixSTE encoder (34M params, 101G FLOPs/sample).
+model:
+  name: mixste
+  params:
+    num_frame: 75
+    num_joints: 39
+    in_chans: 3
+    embed_dim_ratio: 512
+    depth: 8
+    num_heads: 8
+    mlp_ratio: 2.0
+    qkv_bias: true
+    qk_scale: null
+    drop_rate: 0.0
+    attn_drop_rate: 0.0
+    drop_path_rate: 0.1
+    out_dim: 256
+
+phase: both
+seed: 0
+output_dir: outputs/mixste_ablation
+
+data:
+  train_patches_dir: data/TrainPatches
+  patches_dir: data/Patches
+  tmm100_path: data/eval/tmm100performances.mat
+  keyposes_path: data/eval/tmmkeyposes.mat
+
+training:
+  epochs: 38
+  batch_size: 128
+  test_subject: 10
+  # Defaults to the CNN baseline's SGD recipe so the ablation is
+  # apples-to-apples on optimization. Set use_original_hparams: true to
+  # instead use MixSTE's own AdamW / 4e-5 / wd=0.1 / 0.99 lr-decay recipe
+  # (see models/ORIGINAL_HPARAMS in models/__init__.py).
+  optimizer: SGD
+  lr: 0.01
+  weight_decay: 0.0005
+  lr_decay: 1.0
+  lr_div_batchsize: true
+  use_original_hparams: false
+  num_workers: 0
+  print_freq: 10
+
+evaluation:
+  atlas_subject: 7
+  atlas_take: 2
+  benchmark_take_count: 5
+  model_path: null

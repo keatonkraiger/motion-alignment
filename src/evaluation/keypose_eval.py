@@ -13,15 +13,16 @@ the published curve.
 
 from __future__ import annotations
 
-from argparse import ArgumentParser
+import logging
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.io import loadmat, savemat
 
-from valid_performances import partial_mask  # type: ignore[import-not-found]
+from .valid_performances import partial_mask
 
+log = logging.getLogger(__name__)
 
 FRAMES_PER_SECOND = 50
 KEYPOSES_TO_USE = np.arange(1, 42)  # MATLAB 2:42 (1-indexed) -> Python 1:42
@@ -194,7 +195,7 @@ def evaluate(
 
     auc = np.trapezoid(counts, THRESHOLDS_FRAMES)
     auc_norm = auc / (THRESHOLDS_FRAMES.max() - THRESHOLDS_FRAMES.min())
-    print(f"Normalized AUC = {auc_norm:.4f}")
+    log.info("Normalized AUC = %.4f", auc_norm)
 
     # Plot.
     fig = plt.figure(figsize=(6.86, 2.7))
@@ -247,8 +248,8 @@ def evaluate(
     # Print the headline numbers from the paper's narrative.
     halfsec_pct = float(np.mean(all_abs_errors_arr <= 25) * 100)
     onesec_pct = float(np.mean(all_abs_errors_arr <= 50) * 100)
-    print(f"% within 0.5 s : {halfsec_pct:.2f}")
-    print(f"% within 1.0 s : {onesec_pct:.2f}")
+    log.info("%% within 0.5 s : %.2f", halfsec_pct)
+    log.info("%% within 1.0 s : %.2f", onesec_pct)
 
     return {
         "thresholds_frames": THRESHOLDS_FRAMES,
@@ -262,42 +263,3 @@ def evaluate(
         "errors_by_subject": errors_by_subject,
         "all_abs_errors": all_abs_errors_arr,
     }
-
-
-if __name__ == "__main__":
-    parser = ArgumentParser()
-    parser.add_argument(
-        "--alignments",
-        type=Path,
-        required=True,
-        help="Path to MyMocapAlignments.mat (MATLAB or Python-mirrored).",
-    )
-    parser.add_argument(
-        "--keyposes",
-        type=Path,
-        default=Path("../../data/eval/tmmkeyposes.mat"),
-    )
-    parser.add_argument(
-        "--tmm100",
-        type=Path,
-        default=Path("../../data/eval/tmm100performances.mat"),
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path("../outputs"),
-    )
-    parser.add_argument(
-        "--output-basename",
-        type=str,
-        default="MyMocapKeyposeaccuracy",
-    )
-    args = parser.parse_args()
-
-    evaluate(
-        alignments_path=args.alignments,
-        keyposes_path=args.keyposes,
-        tmm100_path=args.tmm100,
-        output_dir=args.output_dir,
-        output_basename=args.output_basename,
-    )

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-class Encoder(nn.Module):
+class CNNEncoder(nn.Module):
     def __init__(self):
         super().__init__()
         self.conv_1 = nn.Conv2d(

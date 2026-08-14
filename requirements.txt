@@ -4,3 +4,5 @@ matplotlib
 torch
 fvcore
 torch-dct
+pyyaml
+pandas

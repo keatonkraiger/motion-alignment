@@ -24,10 +24,9 @@ Two adaptations vs. the original:
    followed by ``LayerNorm + Linear(embed_dim_ratio -> out_dim)``.
 
 The ``Mlp``/``Attention``/``Block`` blocks are the same minimal versions
-already used in ``model_poseformer.py``; ``DropPath`` is reimplemented
-locally so we don't depend on ``timm`` and we use native ``torch``
-reshapes instead of einops to keep the dependency footprint identical
-to the rest of ``motion_alignment/``.
+already used in ``poseformer.py``; ``DropPath`` is reimplemented locally
+so we don't depend on ``timm`` and we use native ``torch`` reshapes
+instead of einops to keep the dependency footprint minimal.
 
 Default hyper-parameters match the MixSTE paper / its
 ``common/arguments.py`` (``-cs 512 -dep 8``) and ``run.py`` line 230-234
@@ -41,7 +40,7 @@ from functools import partial
 import torch
 import torch.nn as nn
 
-from model_poseformer import Attention, DropPath, Mlp  # noqa: F401  (reuse)
+from .poseformer import Attention, DropPath, Mlp  # noqa: F401  (reuse)
 
 
 class _Block(nn.Module):

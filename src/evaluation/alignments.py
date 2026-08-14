@@ -1,9 +1,5 @@
-"""Encoder-agnostic version of ``compute_alignments.py`` with inference
-benchmarking.
-
-Same alignment / DTW / cost-matrix output as the original
-``compute_alignments.py`` (file format unchanged so
-``evaluate_keypose_transfer.py`` works as-is) plus:
+"""Phase 2: DTW alignment of every performance against a fixed atlas
+performance, using a trained Siamese encoder, plus inference benchmarking.
 
 * End-to-end alignment wall-clock time.
 * Total embedding (forward-pass only) wall-clock time across all valid takes.
@@ -11,37 +7,21 @@ Same alignment / DTW / cost-matrix output as the original
 * Detailed inference-latency benchmark via
   ``benchmark.benchmark_inference`` (per-sample, per-batch, per-take,
   throughput, peak GPU mem).
-
-Use with ``--encoder cnn`` to get baseline numbers, ``--encoder
-poseformer`` for the ablation.
 """
 
 from __future__ import annotations
 
-from argparse import ArgumentParser
-from pathlib import Path
-import sys
+import logging
 import time
+from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from scipy.io import loadmat, savemat
 
-THIS_DIR = Path(__file__).resolve().parent
-SRC_DIR = THIS_DIR.parent
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-from model import Encoder  # noqa: E402
-from model_poseformer import PoseFormerEncoder  # noqa: E402
-from model_mixste import MixSTEEncoder  # noqa: E402
-from model_poseformerv2 import PoseFormerV2Encoder  # noqa: E402
-
-from dtw_from_distmat import dtw_from_distmat  # noqa: E402
-from valid_performances import load_all_performances, valid_mask  # noqa: E402
-
-from benchmark import (  # noqa: E402
+from models import build_model
+from benchmark import (
     benchmark_inference,
     count_flops,
     count_parameters,
@@ -50,24 +30,17 @@ from benchmark import (  # noqa: E402
     write_metrics,
 )
 
+from .dtw import dtw_from_distmat
+from .valid_performances import load_all_performances, valid_mask
+
+log = logging.getLogger(__name__)
+
 
 def _load_patches(patch_dir: Path, subj: int, take: int):
     data = loadmat(str(patch_dir / f"patches_{subj}_{take}.mat"))
     a = data["A"].transpose((3, 2, 0, 1))  # (N, 1, S, F)
     t0 = np.asarray(data["t0"]).squeeze()  # (N,)
     return a.astype(np.float32), t0.astype(np.float64)
-
-
-def _build_encoder(name: str) -> torch.nn.Module:
-    if name == "cnn":
-        return Encoder()
-    if name == "poseformer":
-        return PoseFormerEncoder()
-    if name == "mixste":
-        return MixSTEEncoder()
-    if name == "poseformerv2":
-        return PoseFormerV2Encoder()
-    raise ValueError(f"Unknown encoder: {name!r}")
 
 
 def _embed(model: torch.nn.Module, a_np: np.ndarray, device: str) -> np.ndarray:
@@ -82,15 +55,17 @@ def _cosine_distmat(atlas: np.ndarray, query: np.ndarray) -> np.ndarray:
     return 1.0 - atlas @ query.T
 
 
-def _load_model(model_path: Path, encoder_name: str, device: str) -> torch.nn.Module:
+def _load_model(
+    model_path: Path, encoder_name: str, model_params: dict, device: str
+) -> torch.nn.Module:
     """Try state_dict first, fall back to pickled module."""
     state_dict_path = model_path.with_name("model_state_dict.pt")
     if state_dict_path.exists():
-        print(f"Loading state dict: {state_dict_path}")
-        model = _build_encoder(encoder_name)
+        log.info("Loading state dict: %s", state_dict_path)
+        model = build_model(encoder_name, model_params)
         model.load_state_dict(torch.load(state_dict_path, map_location=device))
     else:
-        print(f"Loading pickled model: {model_path}")
+        log.info("Loading pickled model: %s", model_path)
         model = torch.load(model_path, map_location=device, weights_only=False)
     model.to(device)
     model.eval()
@@ -103,6 +78,7 @@ def compute_alignments(
     tmm100_path: Path,
     output_path: Path,
     encoder_name: str,
+    model_params: dict | None = None,
     metrics_path: Path | None = None,
     benchmark_take_count: int = 5,
     atlas_subj: int = 7,
@@ -110,19 +86,19 @@ def compute_alignments(
     device: str | None = None,
 ) -> None:
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device} | encoder={encoder_name}")
+    log.info("Using device: %s | encoder=%s", device, encoder_name)
 
-    model = _load_model(model_path, encoder_name, device)
+    model = _load_model(model_path, encoder_name, model_params or {}, device)
     param_counts = count_parameters(model)
     flops_info = count_flops(model, (1, 1, 75, 117), device=device)
-    print(
-        f"Encoder={encoder_name} | params total={param_counts['total']:,} "
-        f"trainable={param_counts['trainable']:,} | "
-        f"flops/sample={flops_info.get('flops')}"
+    log.info(
+        "Encoder=%s | params total=%s trainable=%s | flops/sample=%s",
+        encoder_name, f"{param_counts['total']:,}", f"{param_counts['trainable']:,}",
+        flops_info.get("flops"),
     )
 
     # Embed atlas (timed for benchmarking).
-    print(f"Embedding atlas: subject {atlas_subj}, take {atlas_take}")
+    log.info("Embedding atlas: subject %s, take %s", atlas_subj, atlas_take)
     atlas_a, atlas_t0 = _load_patches(patch_dir, atlas_subj, atlas_take)
     with cuda_sync(device):
         t0 = time.perf_counter()
@@ -132,9 +108,9 @@ def compute_alignments(
 
     subjectdata = load_all_performances(tmm100_path)
     keep = valid_mask(subjectdata)
-    print(
-        f"Total performances: {subjectdata.shape[0]}, "
-        f"valid (kept): {keep.sum()}, partials skipped: {(~keep).sum()}"
+    log.info(
+        "Total performances: %d, valid (kept): %d, partials skipped: %d",
+        subjectdata.shape[0], keep.sum(), (~keep).sum(),
     )
 
     pathcells = []
@@ -154,7 +130,7 @@ def compute_alignments(
     for sstind in range(subjectdata.shape[0]):
         subj, take = int(subjectdata[sstind, 0]), int(subjectdata[sstind, 1])
         if not keep[sstind]:
-            print(f"  [skip partial] subj {subj} take {take}")
+            log.info("  [skip partial] subj %d take %d", subj, take)
             pathcells.append(
                 [
                     np.zeros((0, 2), dtype=np.int64),
@@ -168,7 +144,7 @@ def compute_alignments(
         try:
             patches_a, t0_list = _load_patches(patch_dir, subj, take)
         except FileNotFoundError:
-            print(f"  [missing patches] subj {subj} take {take} — skipping")
+            log.info("  [missing patches] subj %d take %d - skipping", subj, take)
             pathcells.append(
                 [
                     np.zeros((0, 2), dtype=np.int64),
@@ -212,11 +188,11 @@ def compute_alignments(
         if len(benchmark_take_tensors) < benchmark_take_count:
             benchmark_take_tensors.append(torch.from_numpy(patches_a))
 
-        print(
-            f"  subj {subj} take {take}: N={patches_a.shape[0]} "
-            f"embed={per_take_embed_seconds[-1] * 1000:.1f} ms "
-            f"dtw={per_take_dtw_seconds[-1] * 1000:.1f} ms "
-            f"path_len={path.shape[0]} avg_cost={costmatavg[sstind]:.4f}"
+        log.info(
+            "  subj %d take %d: N=%d embed=%.1f ms dtw=%.1f ms path_len=%d avg_cost=%.4f",
+            subj, take, patches_a.shape[0],
+            per_take_embed_seconds[-1] * 1000, per_take_dtw_seconds[-1] * 1000,
+            path.shape[0], costmatavg[sstind],
         )
 
     overall_seconds = time.perf_counter() - overall_t0
@@ -251,18 +227,17 @@ def compute_alignments(
     )
 
     valid_costs = costmatavg[keep]
-    print(
-        f"Saved alignments to {output_path}\n"
-        f"  median avg cost (valid): {np.median(valid_costs):.4f}\n"
-        f"  mean   avg cost (valid): {np.mean(valid_costs):.4f}\n"
-        f"  total alignment wall-clock: {overall_seconds:.1f}s"
+    log.info(
+        "Saved alignments to %s\n  median avg cost (valid): %.4f\n"
+        "  mean   avg cost (valid): %.4f\n  total alignment wall-clock: %.1fs",
+        output_path, np.median(valid_costs), np.mean(valid_costs), overall_seconds,
     )
 
     # --- Structured inference benchmark on a few cached takes. -----------
     if benchmark_take_tensors:
-        print(
-            "Running structured inference benchmark on "
-            f"{len(benchmark_take_tensors)} take(s)..."
+        log.info(
+            "Running structured inference benchmark on %d take(s)...",
+            len(benchmark_take_tensors),
         )
         inference_metrics = benchmark_inference(
             model=model,
@@ -308,39 +283,4 @@ def compute_alignments(
 
     if metrics_path is not None:
         write_metrics(metrics_path, metrics)
-        print(f"Saved alignment benchmarks: {metrics_path}")
-
-
-if __name__ == "__main__":
-    parser = ArgumentParser()
-    parser.add_argument("--model", type=Path, required=True)
-    parser.add_argument("--patch-dir", type=Path, required=True)
-    parser.add_argument(
-        "--encoder",
-        choices=["cnn", "poseformer", "mixste", "poseformerv2"],
-        default="cnn",
-    )
-    parser.add_argument(
-        "--tmm100", type=Path,
-        default=Path("../../data/eval/tmm100performances.mat"),
-    )
-    parser.add_argument("--output", type=Path, default=Path("../outputs/MyMocapAlignments.mat"))
-    parser.add_argument("--metrics", type=Path, default=None)
-    parser.add_argument("--atlas-subject", type=int, default=7)
-    parser.add_argument("--atlas-take", type=int, default=2)
-    parser.add_argument("--benchmark-take-count", type=int, default=5)
-    parser.add_argument("--device", type=str, default=None)
-    args = parser.parse_args()
-
-    compute_alignments(
-        model_path=args.model,
-        patch_dir=args.patch_dir,
-        tmm100_path=args.tmm100,
-        output_path=args.output,
-        encoder_name=args.encoder,
-        metrics_path=args.metrics,
-        benchmark_take_count=args.benchmark_take_count,
-        atlas_subj=args.atlas_subject,
-        atlas_take=args.atlas_take,
-        device=args.device,
-    )
+        log.info("Saved alignment benchmarks: %s", metrics_path)

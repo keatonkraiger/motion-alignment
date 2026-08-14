@@ -10,13 +10,14 @@ Tracks the metrics the user wants to compare across encoders
 * Peak GPU memory during training and inference (when CUDA is available).
 
 These utilities are pure-Python and have no third-party deps beyond
-torch + numpy. Both `train_phase_1_ablation.py` and
-`compute_alignments_ablation.py` use them.
+torch + numpy (aside from FLOPs counting, which needs `fvcore`). Used by
+both phases of `train.py`.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field, asdict
@@ -312,28 +313,25 @@ def train_model_benchmarked(
     test_loader,
     epochs: int,
     device,
-    output_dir: Path,
-    log_file: Path,
     print_freq: int,
     timer: TrainingTimer,
     scheduler=None,
 ):
-    """Same semantics as ``train.train_model`` but with per-epoch timing.
+    """Phase-1 Siamese training loop with per-epoch timing.
 
-    Mirrors the existing loop verbatim (running-mean loss, same logging
-    format, same train/val/test sequence) so ablation runs are
-    apples-to-apples with the baseline pipeline.
+    Logs via the standard ``logging`` module (module logger
+    ``benchmark``); the caller configures handlers, so this same call
+    writes to both the console and a log file without any bookkeeping
+    here.
     """
+    log = logging.getLogger(__name__)
     train_loss_history = []
     val_loss_history = []
 
     with timer.run(device):
         for epoch in range(epochs):
             with timer.epoch(device):
-                header = f"Epoch {epoch + 1}/{epochs} {'-' * 20}"
-                print(header)
-                with open(log_file, "a") as writer:
-                    writer.write(header + "\n")
+                log.info("Epoch %d/%d %s", epoch + 1, epochs, "-" * 20)
 
                 # --- Train. ----------------------------------------------
                 model.train()
@@ -351,14 +349,10 @@ def train_model_benchmarked(
                     running_loss_avg = ((n * running_loss_avg) + loss.item()) / m
                     running_count = m
                     if (i + 1) % print_freq == 0:
-                        msg = (
-                            f"Training | Epoch: {epoch + 1}/{epochs} | "
-                            f"Step: {i + 1}/{len(train_loader)} | "
-                            f"Loss: {running_loss_avg}"
+                        log.info(
+                            "Training | Epoch: %d/%d | Step: %d/%d | Loss: %s",
+                            epoch + 1, epochs, i + 1, len(train_loader), running_loss_avg,
                         )
-                        print(msg)
-                        with open(log_file, "a") as writer:
-                            writer.write(msg + "\n")
                         train_loss_history.append(
                             (epoch * len(train_loader) + (i + 1), running_loss_avg)
                         )
@@ -382,13 +376,7 @@ def train_model_benchmarked(
                             (n * val_running_loss_avg) + loss.item()
                         ) / m
                         val_running_count = m
-                msg = (
-                    f"Validation | Epoch: {epoch + 1} | "
-                    f"Loss: {val_running_loss_avg}"
-                )
-                print(msg)
-                with open(log_file, "a") as writer:
-                    writer.write(msg + "\n")
+                log.info("Validation | Epoch: %d | Loss: %s", epoch + 1, val_running_loss_avg)
                 val_loss_history.append(
                     ((epoch + 1) * len(train_loader), val_running_loss_avg)
                 )
@@ -396,15 +384,10 @@ def train_model_benchmarked(
                 if scheduler is not None:
                     scheduler.step()
                     cur_lr = optimizer.param_groups[0]["lr"]
-                    msg = f"LR after epoch {epoch + 1}: {cur_lr:.3e}"
-                    print(msg)
-                    with open(log_file, "a") as writer:
-                        writer.write(msg + "\n")
+                    log.info("LR after epoch %d: %.3e", epoch + 1, cur_lr)
 
     # --- Test. -----------------------------------------------------------
-    print("-" * 20)
-    with open(log_file, "a") as writer:
-        writer.write(("-" * 20) + "\n")
+    log.info("-" * 20)
     model.eval()
     test_running_loss_avg = 0.0
     test_running_count = 0
@@ -421,9 +404,6 @@ def train_model_benchmarked(
                 (n * test_running_loss_avg) + loss.item()
             ) / m
             test_running_count = m
-    msg = f"Testing | Loss: {test_running_loss_avg}"
-    print(msg)
-    with open(log_file, "a") as writer:
-        writer.write(msg + "\n")
+    log.info("Testing | Loss: %s", test_running_loss_avg)
 
     return model, train_loss_history, val_loss_history, test_running_loss_avg

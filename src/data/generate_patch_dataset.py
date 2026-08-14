@@ -6,11 +6,11 @@ Scans <raw-root>/Subject<N>/MOCAP_MRK_<take>.npy for every subject to
 build the (subject, take) performance list, extracts patches for each
 with a deterministic per-take seed, and writes them out as
 patches_<subj>_<take>.mat (keys A, B, t0) -- the format
-data_loading.py / compute_alignments*.py expect.
+data/datasets.py and evaluation/alignments.py expect.
 
 TrainPatches is not independently resampled: it's the same extracted
-patches for the 20-take training subset (data_loading.ALL_TAKES), just
-also written into a separate directory.
+patches for the 20-take training subset (datasets.ALL_TAKES), just also
+written into a separate directory.
 """
 
 from __future__ import annotations
@@ -23,11 +23,9 @@ from pathlib import Path
 import numpy as np
 from scipy.io import savemat
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from extract_mocap_patches import PatchOptions, extract_mocap_patches
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from data_loading import ALL_TAKES
+from datasets import ALL_TAKES
 
 TAKE_RE = re.compile(r"^MOCAP_MRK_(\d+)\.npy$")
 

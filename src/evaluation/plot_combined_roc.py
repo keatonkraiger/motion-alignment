@@ -1,7 +1,7 @@
 """Combined ROC figure for CNN, PoseFormer, and PoseFormerV2 ablations.
 
-Reads the per-encoder ROC ``.npz`` files written by
-``evaluate_keypose_transfer.py`` and produces a single, paper-ready figure
+Reads the per-encoder ROC ``.npz`` files written by phase 2's
+``evaluation/keypose_eval.py`` and produces a single, paper-ready figure
 (PDF + EPS, vector text) overlaying the three curves with markers at
 1.00, 1.25, 1.50, and 1.75 seconds.
 """
