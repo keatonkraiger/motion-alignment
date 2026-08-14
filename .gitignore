@@ -1,0 +1,20 @@
+# large / regenerable data and run outputs (see README for how to obtain/regenerate)
+/data/
+/outputs/
+
+# local-only, not part of the project
+/_archive/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
