@@ -1,0 +1,38 @@
+# CNN baseline encoder on SMPL-X body-joint patches (22 joints: pelvis +
+# 21 body_pose joints, positions only -- shared identically across
+# SMPL/SMPL-H/SMPL-X, see src/data/smplx_kinematics.py). Same architecture
+# family, training recipe, seed, and train/test split as configs/cnn.yaml,
+# so run_summary.json is directly comparable to the mocap-marker baseline.
+model:
+  name: cnn
+  params:
+    num_markers: 22
+
+phase: both  # "1" (train only), "2" (evaluate only, needs evaluation.model_path or --model), or "both"
+seed: 0
+output_dir: outputs/cnn_smplx_ablation
+
+data:
+  train_patches_dir: data/TrainPatchesSMPLX
+  patches_dir: data/PatchesSMPLX
+  tmm100_path: data/eval/tmm100performances.mat
+  keyposes_path: data/eval/tmmkeyposes.mat
+
+training:
+  epochs: 38
+  batch_size: 128
+  test_subject: 10        # held out as the phase-1 test set
+  optimizer: SGD
+  lr: 0.01
+  weight_decay: 0.0005
+  lr_decay: 1.0            # per-epoch ExponentialLR gamma; 1.0 disables decay
+  lr_div_batchsize: true   # baseline recipe divides lr by batch_size
+  use_original_hparams: false  # cnn's "original" recipe *is* this baseline recipe
+  num_workers: 0
+  print_freq: 10
+
+evaluation:
+  atlas_subject: 7
+  atlas_take: 2
+  benchmark_take_count: 5
+  model_path: null  # only read when phase is "2" and --model isn't passed

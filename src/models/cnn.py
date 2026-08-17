@@ -2,8 +2,19 @@ import torch
 import torch.nn as nn
 
 class CNNEncoder(nn.Module):
-    def __init__(self):
+    def __init__(self, num_markers: int = 39):
+        """
+        Parameters
+        ----------
+        num_markers : int
+            Number of markers/joints per frame (mocap markers: 39; SMPL-X
+            body joints: 22). Input feature dim is ``num_markers * 3``.
+            conv_1's stride-3 kernel-3 exactly divides that down to
+            ``num_markers`` again, which is why conv_2's kernel width
+            always equals ``num_markers`` regardless of its value.
+        """
         super().__init__()
+        self.num_markers = num_markers
         self.conv_1 = nn.Conv2d(
             in_channels=1,
             out_channels=32,
@@ -17,7 +28,7 @@ class CNNEncoder(nn.Module):
         self.conv_2 = nn.Conv2d(
             in_channels=32,
             out_channels=64,
-            kernel_size=(3, 39),
+            kernel_size=(3, num_markers),
             stride=3,
             padding=0,
             bias=True

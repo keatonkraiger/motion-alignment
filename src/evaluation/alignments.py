@@ -90,16 +90,19 @@ def compute_alignments(
 
     model = _load_model(model_path, encoder_name, model_params or {}, device)
     param_counts = count_parameters(model)
-    flops_info = count_flops(model, (1, 1, 75, 117), device=device)
+
+    # Embed atlas (timed for benchmarking).
+    log.info("Embedding atlas: subject %s, take %s", atlas_subj, atlas_take)
+    atlas_a, atlas_t0 = _load_patches(patch_dir, atlas_subj, atlas_take)
+
+    sample_shape = (1,) + tuple(atlas_a.shape[1:])  # (1, 1, num_frame, num_markers*3)
+    flops_info = count_flops(model, sample_shape, device=device)
     log.info(
         "Encoder=%s | params total=%s trainable=%s | flops/sample=%s",
         encoder_name, f"{param_counts['total']:,}", f"{param_counts['trainable']:,}",
         flops_info.get("flops"),
     )
 
-    # Embed atlas (timed for benchmarking).
-    log.info("Embedding atlas: subject %s, take %s", atlas_subj, atlas_take)
-    atlas_a, atlas_t0 = _load_patches(patch_dir, atlas_subj, atlas_take)
     with cuda_sync(device):
         t0 = time.perf_counter()
     atlas_vecs = _embed(model, atlas_a, device)

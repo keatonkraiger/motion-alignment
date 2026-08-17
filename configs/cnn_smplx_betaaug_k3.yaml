@@ -1,0 +1,39 @@
+# CNN on SMPL-X body-joint patches, with shape (beta) augmentation on the
+# training set: 3 extra jittered-body-shape re-posings per training take
+# (see src/data/generate_smplx_patch_dataset.py --beta-augment-k), giving
+# ~4x the training pairs and a wider range of body shapes than the 10 real
+# training subjects. Eval set (data/PatchesSMPLX) is untouched -- still
+# real betas only. Otherwise identical to configs/cnn_smplx.yaml.
+model:
+  name: cnn
+  params:
+    num_markers: 22
+
+phase: both
+seed: 0
+output_dir: outputs/cnn_smplx_betaaug_k3_ablation
+
+data:
+  train_patches_dir: data/TrainPatchesSMPLX_betaaug_k3
+  patches_dir: data/PatchesSMPLX
+  tmm100_path: data/eval/tmm100performances.mat
+  keyposes_path: data/eval/tmmkeyposes.mat
+
+training:
+  epochs: 38
+  batch_size: 128
+  test_subject: 10
+  optimizer: SGD
+  lr: 0.01
+  weight_decay: 0.0005
+  lr_decay: 1.0
+  lr_div_batchsize: true
+  use_original_hparams: false
+  num_workers: 0
+  print_freq: 10
+
+evaluation:
+  atlas_subject: 7
+  atlas_take: 2
+  benchmark_take_count: 5
+  model_path: null

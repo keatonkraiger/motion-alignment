@@ -1,0 +1,37 @@
+# Same as cnn_smplx_betaaug_k3.yaml, but A and B of a training pair may be
+# drawn from two *different* body-shape variants (--beta-augment-pair),
+# directly training the embedding to match across shape changes rather
+# than just adding more same-shape pairs.
+model:
+  name: cnn
+  params:
+    num_markers: 22
+
+phase: both
+seed: 0
+output_dir: outputs/cnn_smplx_betaaug_k3_pair_ablation
+
+data:
+  train_patches_dir: data/TrainPatchesSMPLX_betaaug_k3_pair
+  patches_dir: data/PatchesSMPLX
+  tmm100_path: data/eval/tmm100performances.mat
+  keyposes_path: data/eval/tmmkeyposes.mat
+
+training:
+  epochs: 38
+  batch_size: 128
+  test_subject: 10
+  optimizer: SGD
+  lr: 0.01
+  weight_decay: 0.0005
+  lr_decay: 1.0
+  lr_div_batchsize: true
+  use_original_hparams: false
+  num_workers: 0
+  print_freq: 10
+
+evaluation:
+  atlas_subject: 7
+  atlas_take: 2
+  benchmark_take_count: 5
+  model_path: null

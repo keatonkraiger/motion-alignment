@@ -128,7 +128,8 @@ def run_phase1(cfg: dict, output_dir: Path) -> Path:
     # --- Model + optimizer. -------------------------------------------
     model = build_model(cfg["model"]["name"], cfg["model"].get("params")).to(device)
     param_counts = count_parameters(model)
-    flops_info = count_flops(model, (1, 1, 75, 117), device=device)
+    sample_shape = (1,) + tuple(train_a.shape[1:])  # (1, 1, num_frame, num_markers*3)
+    flops_info = count_flops(model, sample_shape, device=device)
     log.info(
         "Encoder=%s | params total=%s trainable=%s | flops/sample=%s",
         cfg["model"]["name"], f"{param_counts['total']:,}",

@@ -1,0 +1,40 @@
+# CNN on SMPL-X body-joint patches, using a fixed per-take skeleton-scale
+# normalization (mean real rest-pose bone length from the pelvis, see
+# smplx_kinematics.compute_skeleton_scale) instead of extract_mocap_patches.py's
+# per-window std normalization. A lower-variance, deterministic alternative
+# to re-estimating scale from each window's 75 frames -- only possible
+# because SMPL-X gives us the real skeleton, unlike raw markers. Otherwise
+# identical to configs/cnn_smplx.yaml.
+model:
+  name: cnn
+  params:
+    num_markers: 22
+
+phase: both
+seed: 0
+output_dir: outputs/cnn_smplx_skeletonnorm_ablation
+
+data:
+  train_patches_dir: data/TrainPatchesSMPLX_skeletonnorm
+  patches_dir: data/PatchesSMPLX_skeletonnorm
+  tmm100_path: data/eval/tmm100performances.mat
+  keyposes_path: data/eval/tmmkeyposes.mat
+
+training:
+  epochs: 38
+  batch_size: 128
+  test_subject: 10
+  optimizer: SGD
+  lr: 0.01
+  weight_decay: 0.0005
+  lr_decay: 1.0
+  lr_div_batchsize: true
+  use_original_hparams: false
+  num_workers: 0
+  print_freq: 10
+
+evaluation:
+  atlas_subject: 7
+  atlas_take: 2
+  benchmark_take_count: 5
+  model_path: null
